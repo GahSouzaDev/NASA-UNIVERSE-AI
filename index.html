@@ -271,12 +271,18 @@ ul{list-style:none}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms !important;transition-duration:.001ms !important}}
 
 .launch-card{display:flex;gap:var(--sp-4);padding:var(--sp-4);background:var(--bg-1);border:1px solid var(--line);border-radius:var(--radius-lg);margin-bottom:12px;flex-wrap:wrap}
-.launch-count{display:flex;gap:8px}
+.launch-count{display:flex;gap:8px;margin-top:12px}
 .launch-count .seg{background:var(--bg-2);border-radius:var(--radius-sm);padding:8px 10px;text-align:center;min-width:52px}
 .launch-count .seg b{display:block;font-family:var(--font-mono);font-size:1.15rem;color:var(--flare)}
 .launch-count .seg span{font-size:.58rem;color:var(--text-2);text-transform:uppercase;font-family:var(--font-mono)}
 
 .planet-swatch{width:16px;height:16px;border-radius:50%;flex:none;display:inline-block}
+
+/* Novos estilos para os horários do lançamento */
+.launch-times{margin: 8px 0; font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-1); display: flex; flex-wrap: wrap; gap: 12px; background: var(--bg-2); border-radius: var(--radius-md); padding: 8px 12px;}
+.launch-times span{display: inline-flex; align-items: center; gap: 4px;}
+.launch-times .lt-lbl{color: var(--text-2); text-transform: uppercase; font-size: 0.65rem; letter-spacing: 0.03em;}
+.launch-times .lt-val{font-weight: 700; color: var(--text-0);}
 
 @media (max-width:720px){
   .container{padding:0 var(--sp-4)}
@@ -429,6 +435,7 @@ const I18N = (function(){
     "launches.title":"Próximos Lançamentos","launches.subtitle":"Launch Library 2 — The Space Devs",
     "launches.empty":"Nenhum lançamento futuro encontrado no momento.","launches.agency":"Agência","launches.rocket":"Foguete",
     "launches.pad":"Local de lançamento","launches.status":"Status","launches.days":"dias","launches.hours":"h","launches.min":"min","launches.sec":"s",
+    "launches.utcTime":"Horário UTC","launches.localTime":"Horário local (aprox.)","launches.brtTime":"Horário de Brasília",
     "planets.title":"Comparador de Planetas","planets.subtitle":"Dados aproximados — NASA Planetary Fact Sheets",
     "planets.mass":"Massa (×10²⁴ kg)","planets.diameter":"Diâmetro (km)","planets.gravity":"Gravidade (m/s²)",
     "planets.dayLength":"Duração do dia","planets.yearLength":"Duração do ano","planets.moons":"Luas conhecidas",
@@ -486,6 +493,7 @@ const I18N = (function(){
     "launches.title":"Upcoming Launches","launches.subtitle":"Launch Library 2 — The Space Devs",
     "launches.empty":"No upcoming launches found right now.","launches.agency":"Agency","launches.rocket":"Rocket",
     "launches.pad":"Launch site","launches.status":"Status","launches.days":"days","launches.hours":"h","launches.min":"min","launches.sec":"s",
+    "launches.utcTime":"UTC time","launches.localTime":"Local time (approx.)","launches.brtTime":"Brasília time",
     "planets.title":"Planet Comparator","planets.subtitle":"Approximate data — NASA Planetary Fact Sheets",
     "planets.mass":"Mass (×10²⁴ kg)","planets.diameter":"Diameter (km)","planets.gravity":"Gravity (m/s²)",
     "planets.dayLength":"Day length","planets.yearLength":"Year length","planets.moons":"Known moons",
@@ -543,6 +551,7 @@ const I18N = (function(){
     "launches.title":"Próximos Lanzamientos","launches.subtitle":"Launch Library 2 — The Space Devs",
     "launches.empty":"No se encontraron lanzamientos próximos.","launches.agency":"Agencia","launches.rocket":"Cohete",
     "launches.pad":"Sitio de lanzamiento","launches.status":"Estado","launches.days":"días","launches.hours":"h","launches.min":"min","launches.sec":"s",
+    "launches.utcTime":"Horario UTC","launches.localTime":"Hora local (aprox.)","launches.brtTime":"Horario de Brasilia",
     "planets.title":"Comparador de Planetas","planets.subtitle":"Datos aproximados — NASA Planetary Fact Sheets",
     "planets.mass":"Masa (×10²⁴ kg)","planets.diameter":"Diámetro (km)","planets.gravity":"Gravedad (m/s²)",
     "planets.dayLength":"Duración del día","planets.yearLength":"Duración del año","planets.moons":"Lunas conocidas",
@@ -619,14 +628,7 @@ const Store = (function(){
 })();
 
 /* =====================================================================
-   4. API
-   Fontes usadas (todas gratuitas e com CORS liberado para uso em navegador):
-   - api.nasa.gov            → APOD, NeoWs (asteroides), EPIC (Terra), DONKI (clima espacial)
-   - images-api.nasa.gov     → NASA Image and Video Library (usada para Marte,
-                                já que a antiga Mars Rover Photos API foi
-                                oficialmente arquivada pela NASA em api.nasa.gov)
-   - api.wheretheiss.at      → posição em tempo real da ISS
-   - ll.thespacedevs.com     → próximos lançamentos (Launch Library 2)
+   4. API (CORRIGIDO EPIC)
    ===================================================================== */
 const Api = (function(){
   const BASE = "https://api.nasa.gov";
@@ -722,6 +724,25 @@ const Api = (function(){
     }catch(err){ setStatus("offline"); throw (err&&err.code) ? err : { code:"NETWORK", message:t("err.network") }; }
   }
 
+  // NOVA FUNÇÃO PARA EPIC COM FALLBACK
+  async function epic(){
+    try {
+      // Tenta o conjunto 'natural' primeiro
+      return await get("/EPIC/api/natural", {}, 1800000);
+    } catch (err) {
+      console.warn("EPIC natural falhou, tentando enhanced...");
+      // Se falhar, tenta o 'enhanced'
+      return await get("/EPIC/api/enhanced", {}, 1800000);
+    }
+  }
+
+  function epicImgUrl(item, type = 'natural'){
+    // Tenta deduzir o tipo pela URL de origem, mas usa o parâmetro como fallback
+    const d = new Date(item.date.replace(" ","T")+"Z");
+    const y = d.getUTCFullYear(), m = Utils.pad2(d.getUTCMonth()+1), day = Utils.pad2(d.getUTCDate());
+    return `https://epic.gsfc.nasa.gov/archive/${type}/${y}/${m}/${day}/png/${item.image}.png?api_key=${getKey()}`;
+  }
+
   function invalidateAll(){
     Object.keys(localStorage).forEach(k => { if(k.startsWith("nasaai:cache:")) localStorage.removeItem(k); });
   }
@@ -731,12 +752,7 @@ const Api = (function(){
     apodRandom: () => get("/planetary/apod", { count: 1 }, 0),
     neoFeed: (start, end) => get("/neo/rest/v1/feed", { start_date:start, end_date:end }, 600000),
     donkiFlares: (start, end) => get("/DONKI/FLR", { startDate:start, endDate:end }, 600000),
-    epic: () => get("/EPIC/api/natural/images", {}, 1800000),
-    epicImgUrl: (item) => {
-      const d = new Date(item.date.replace(" ","T")+"Z");
-      const y = d.getUTCFullYear(), m = Utils.pad2(d.getUTCMonth()+1), day = Utils.pad2(d.getUTCDate());
-      return `https://epic.gsfc.nasa.gov/archive/natural/${y}/${m}/${day}/png/${item.image}.png?api_key=${getKey()}`;
-    },
+    epic, epicImgUrl,
     marsImages, launches, issNow, invalidateAll, getKey,
   };
 })();
@@ -1047,7 +1063,7 @@ const Router = (function(){
 })();
 
 /* =====================================================================
-   14. VIEWS
+   14. VIEWS (CORRIGIDO EARTH E LANÇAMENTOS)
    ===================================================================== */
 const Views = (function(){
   const main = () => document.getElementById("appMain");
@@ -1443,7 +1459,7 @@ const Views = (function(){
     function paint(){
       const d = Number(diamInput.value)||1, v = Number(velInput.value)||1, rho = Number(densInput.value)||3000, targetRho = Number(targetSel.value);
       const r = Impact.calc(d, v, rho, targetRho);
-      const hiroshimaKt = 15000; // toneladas de TNT (Little Boy, ~15 kt)
+      const hiroshimaKt = 15000;
       const ratio = r.tntTons / hiroshimaKt;
       resultHost.innerHTML = "";
       resultHost.appendChild(Utils.el("div",{class:"info-grid"},[
@@ -1460,7 +1476,7 @@ const Views = (function(){
     return wrap;
   }
 
-  /* ---------- TERRA (EPIC) ---------- */
+  /* ---------- TERRA (EPIC) CORRIGIDO ---------- */
   async function renderEarth(){
     main().innerHTML = "";
     main().appendChild(Utils.el("div",{class:"view-head"},[
@@ -1469,15 +1485,16 @@ const Views = (function(){
     const body = Utils.el("div",{class:"grid grid-3 reveal-stagger"}); main().appendChild(body);
     body.appendChild(loadingBlock(6));
     try{
-      const items = await Api.epic();
+      const items = await Api.epic(); // <- USA A NOVA FUNÇÃO COM FALLBACK
       body.innerHTML = "";
       if(!items.length){ body.appendChild(Utils.el("div",{class:"empty-state"},[t("earth.empty")])); return; }
       items.slice(0,18).forEach(item => {
-        const url = Api.epicImgUrl(item);
+        // Tenta detectar o tipo, mas usa 'natural' como padrão
+        const url = Api.epicImgUrl(item, 'natural');
         const card = Utils.el("div",{class:"photo-card fade-in"});
         card.onclick = () => openEpicModal(item, url);
         card.append(
-          Utils.el("img",{class:"thumb",src:url,alt:t("earth.cardTitle"),loading:"lazy"}),
+          Utils.el("img",{class:"thumb",src:url,alt:t("earth.cardTitle"),loading:"lazy", onerror: "this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22%3E%3Crect fill=%22%23121b28%22 width=%22400%22 height=%22300%22/%3E%3Ctext x=%22200%22 y=%22150%22 fill=%22%2357667a%22 font-size=%2214%22 text-anchor=%22middle%22%3EErro ao carregar%3C/text%3E%3C/svg%3E'"}),
           Utils.el("div",{class:"pc-body"},[
             Utils.el("div",{class:"pc-title"},[t("earth.cardTitle")]),
             Utils.el("div",{class:"pc-meta"},[item.date]),
@@ -1565,7 +1582,7 @@ const Views = (function(){
     search();
   }
 
-  /* ---------- LANÇAMENTOS ---------- */
+  /* ---------- LANÇAMENTOS (MELHORADO) ---------- */
   let launchTimers = [];
   async function renderLaunches(){
     launchTimers.forEach(clearInterval); launchTimers = [];
@@ -1582,22 +1599,45 @@ const Views = (function(){
       results.forEach(l => host.appendChild(launchCard(l)));
     }catch(err){ host.innerHTML=""; host.appendChild(errorState(err, renderLaunches)); }
   }
+
   function launchCard(l){
     const card = Utils.el("div",{class:"launch-card fade-in"});
     const img = l.image ? Utils.el("img",{src:l.image,alt:l.name,style:"width:96px;height:96px;object-fit:cover;border-radius:8px;flex:none;background:var(--bg-2)"}) : null;
+
+    const utcDate = new Date(l.net);
+    // Calcula horário local baseado na longitude do pad (aproximado)
+    let localTimeStr = "—";
+    if (l.pad && l.pad.longitude) {
+      const localOffsetHours = l.pad.longitude / 15;
+      const localDate = new Date(utcDate.getTime() + localOffsetHours * 3600000);
+      localTimeStr = localDate.toLocaleString(undefined, { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false });
+    }
+
+    // Horário de Brasília (GMT-3)
+    const brtDate = new Date(utcDate.toLocaleString("en-US", {timeZone: "America/Sao_Paulo"}));
+    const brtTimeStr = brtDate.toLocaleString(undefined, { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false });
+
+    const timesHtml = Utils.el("div",{class:"launch-times"}, [
+      Utils.el("span",{},[Utils.el("span",{class:"lt-lbl"},[t("launches.utcTime")+":"]), Utils.el("span",{class:"lt-val"},[utcDate.toISOString().replace('T',' ').slice(0,16)+" UTC"])]),
+      Utils.el("span",{},[Utils.el("span",{class:"lt-lbl"},[t("launches.brtTime")+":"]), Utils.el("span",{class:"lt-val"},[brtTimeStr])]),
+      localTimeStr !== "—" ? Utils.el("span",{},[Utils.el("span",{class:"lt-lbl"},[t("launches.localTime")+":"]), Utils.el("span",{class:"lt-val"},[localTimeStr])]) : null,
+    ]);
+
     const info = Utils.el("div",{style:"flex:1;min-width:200px"},[
       Utils.el("div",{style:"font-weight:700;font-size:.95rem;margin-bottom:4px"},[l.name]),
       Utils.el("div",{class:"risk-meta"},[t("launches.agency")+": "+(l.launch_service_provider?l.launch_service_provider.name:"—")]),
       Utils.el("div",{class:"risk-meta"},[t("launches.rocket")+": "+(l.rocket&&l.rocket.configuration?l.rocket.configuration.name:"—")]),
       Utils.el("div",{class:"risk-meta"},[t("launches.pad")+": "+(l.pad?l.pad.name+" — "+(l.pad.location?l.pad.location.name:""):"—")]),
       Utils.el("div",{class:"risk-meta"},[t("launches.status")+": "+(l.status?l.status.name:"—")]),
+      timesHtml,
     ]);
+
     const countdown = Utils.el("div",{class:"launch-count"});
     info.appendChild(countdown);
     function tick(){
-      const diff = new Date(l.net).getTime() - Date.now();
+      const diff = utcDate.getTime() - Date.now();
       countdown.innerHTML = "";
-      if(diff<=0){ countdown.appendChild(Utils.el("span",{class:"chip flare"},[t("launches.status")])); return; }
+      if(diff<=0){ countdown.appendChild(Utils.el("span",{class:"chip flare"},["LANÇADO"])); return; }
       const dd=Math.floor(diff/86400000), hh=Math.floor(diff/3600000)%24, mm=Math.floor(diff/60000)%60, ss=Math.floor(diff/1000)%60;
       [[dd,t("launches.days")],[hh,t("launches.hours")],[mm,t("launches.min")],[ss,t("launches.sec")]].forEach(([v,lbl]) => {
         countdown.appendChild(Utils.el("div",{class:"seg"},[Utils.el("b",{},[String(v).padStart(2,"0")]), Utils.el("span",{},[lbl])]));
